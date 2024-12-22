@@ -17,6 +17,7 @@
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.4",
+    "@supabase/supabase-js": "^2.47.10",
     "@types/ms": "^0.7.34",
     "@types/node": "22.10.2",
     "@types/react": "19.0.1",

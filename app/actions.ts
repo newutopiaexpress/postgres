@@ -1,103 +1,249 @@
 "use server";
 
+import { createClient } from '@supabase/supabase-js'
 import { Config, configSchema, explanationsSchema, Result } from "@/lib/types";
-import { openai } from "@ai-sdk/openai";
-import { sql } from "@vercel/postgres";
+import { openai } from '@ai-sdk/openai';
 import { generateObject } from "ai";
 import { z } from "zod";
 
-export const generateQuery = async (input: string) => {
-  "use server";
+// Initialize Supabase client with error checking
+const initSupabase = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!url || !key) {
+    throw new Error('Missing Supabase credentials');
+  }
+  
+  return createClient(url, key, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
+};
+
+const supabase = initSupabase();
+
+export const testDatabaseConnection = async () => {
   try {
-    const result = await generateObject({
-      model: openai("gpt-4o"),
-      system: `You are a SQL (postgres) and data visualization expert. Your job is to help the user write a SQL query to retrieve the data they need. The table schema is as follows:
+    console.log('Testing database connection...');
+    
+    // 1. Test basic connection with a simple query
+    const { data: testData, error: testError } = await supabase
+      .from('credits')
+      .select('id')
+      .limit(1);
 
-      unicorns (
-      id SERIAL PRIMARY KEY,
-      company VARCHAR(255) NOT NULL UNIQUE,
-      valuation DECIMAL(10, 2) NOT NULL,
-      date_joined DATE,
-      country VARCHAR(255) NOT NULL,
-      city VARCHAR(255) NOT NULL,
-      industry VARCHAR(255) NOT NULL,
-      select_investors TEXT NOT NULL
-    );
+    console.log('Basic connection test:', { data: testData, error: testError });
 
-    Only retrieval queries are allowed.
+    if (testError) {
+      console.error('Basic connection failed:', testError);
+      return {
+        success: false,
+        message: `Basic connection failed: ${testError.message}`,
+        details: { error: testError }
+      };
+    }
 
-    For things like industry, company names and other string fields, use the ILIKE operator and convert both the search term and the field to lowercase using LOWER() function. For example: LOWER(industry) ILIKE LOWER('%search_term%').
-
-    Note: select_investors is a comma-separated list of investors. Trim whitespace to ensure you're grouping properly. Note, some fields may be null or have only one value.
-    When answering questions about a specific field, ensure you are selecting the identifying column (ie. what is Vercel's valuation would select company and valuation').
-
-    The industries available are:
-    - healthcare & life sciences
-    - consumer & retail
-    - financial services
-    - enterprise tech
-    - insurance
-    - media & entertainment
-    - industrials
-    - health
-
-    If the user asks for a category that is not in the list, infer based on the list above.
-
-    Note: valuation is in billions of dollars so 10b would be 10.0.
-    Note: if the user asks for a rate, return it as a decimal. For example, 0.1 would be 10%.
-
-    If the user asks for 'over time' data, return by year.
-
-    When searching for UK or USA, write out United Kingdom or United States respectively.
-
-    EVERY QUERY SHOULD RETURN QUANTITATIVE DATA THAT CAN BE PLOTTED ON A CHART! There should always be at least two columns. If the user asks for a single column, return the column and the count of the column. If the user asks for a rate, return the rate as a decimal. For example, 0.1 would be 10%.
-    `,
-      prompt: `Generate the query necessary to retrieve the data the user wants: ${input}`,
-      schema: z.object({
-        query: z.string(),
-      }),
+    // 2. Test RPC function
+    const { data: rpcData, error: rpcError } = await supabase.rpc('execute_query', {
+      query_text: 'SELECT 1 as test'
     });
-    return result.object.query;
-  } catch (e) {
-    console.error(e);
-    throw new Error("Failed to generate query");
+
+    console.log('RPC test:', { data: rpcData, error: rpcError });
+
+    if (rpcError) {
+      console.error('RPC function test failed:', rpcError);
+      return {
+        success: false,
+        message: `RPC function test failed: ${rpcError.message}`,
+        details: { error: rpcError }
+      };
+    }
+
+    // 3. Test auth access
+    const { data: authData, error: authError } = await supabase
+      .from('credits')
+      .select(`
+        id,
+        user_id,
+        credits
+      `)
+      .limit(1);
+
+    console.log('Auth access test:', { data: authData, error: authError });
+
+    return {
+      success: true,
+      message: "Database connection successful",
+      details: {
+        basicTest: testData,
+        rpcTest: rpcData,
+        authTest: authData
+      }
+    };
+
+  } catch (e: any) {
+    console.error("Database connection test failed:", e);
+    return {
+      success: false,
+      message: e.message || 'Unknown error occurred',
+      details: {
+        error: e,
+        supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'configured' : 'missing',
+        serviceRole: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'configured' : 'missing'
+      }
+    };
   }
 };
 
 export const runGenerateSQLQuery = async (query: string) => {
   "use server";
-  // Check if the query is a SELECT statement
-  if (
-    !query.trim().toLowerCase().startsWith("select") ||
-    query.trim().toLowerCase().includes("drop") ||
-    query.trim().toLowerCase().includes("delete") ||
-    query.trim().toLowerCase().includes("insert") ||
-    query.trim().toLowerCase().includes("update") ||
-    query.trim().toLowerCase().includes("alter") ||
-    query.trim().toLowerCase().includes("truncate") ||
-    query.trim().toLowerCase().includes("create") ||
-    query.trim().toLowerCase().includes("grant") ||
-    query.trim().toLowerCase().includes("revoke")
-  ) {
-    throw new Error("Only SELECT queries are allowed");
+  
+  if (!query || !query.trim()) {
+    throw new Error("Query cannot be empty");
   }
 
-  let data: any;
   try {
-    data = await sql.query(query);
-  } catch (e: any) {
-    if (e.message.includes('relation "unicorns" does not exist')) {
-      console.log(
-        "Table does not exist, creating and seeding it with dummy data now...",
-      );
-      // throw error
-      throw Error("Table does not exist");
-    } else {
-      throw e;
-    }
-  }
+    console.log('Starting query execution:', query);
 
-  return data.rows as Result[];
+    const { data: rpcData, error: rpcError } = await supabase.rpc('execute_query', {
+      query_text: query
+    });
+
+    if (rpcError) {
+      console.error('RPC error:', rpcError);
+      throw new Error(`Database error: ${rpcError.message}`);
+    }
+
+    console.log('Raw RPC response:', rpcData);
+
+    if (!rpcData) {
+      console.log('No data returned');
+      return [];
+    }
+
+    // Ensure we're working with an array
+    const results = Array.isArray(rpcData) ? rpcData : [rpcData];
+    console.log('Processed results:', results);
+    
+    return results as Result[];
+
+  } catch (e: any) {
+    console.error("Query execution error:", e);
+    throw new Error(`Query execution failed: ${e.message}`);
+  }
+};
+
+export const generateQuery = async (input: string) => {
+  "use server";
+  try {
+    const result = await generateObject({
+      model: openai("gpt-4"),
+      system: `You are a SQL analyst helping website administrators analyze user data and activity.
+
+      Database Schema:
+      public.profiles (
+        id UUID PRIMARY KEY,       -- References auth.users(id)
+        full_name TEXT,           -- User's full name
+        email TEXT,               -- User's email address
+        -- other columns not needed for analysis
+      );
+
+      public.models (
+        id BIGINT PRIMARY KEY,
+        name TEXT,               -- Model name given by user
+        type TEXT,               -- Model type
+        created_at TIMESTAMP WITH TIME ZONE,
+        user_id UUID,            -- References auth.users(id)
+        status TEXT,             -- Model status
+        "modelId" TEXT           -- External reference
+      );
+
+      public.credits (
+        id BIGINT PRIMARY KEY,
+        created_at TIMESTAMP WITH TIME ZONE,
+        credits INTEGER,         -- Credit amount
+        user_id UUID            -- References auth.users(id)
+      );
+
+      public.images (
+        id BIGINT PRIMARY KEY,
+        "modelId" BIGINT,        -- References models.id
+        uri TEXT,
+        created_at TIMESTAMP WITH TIME ZONE
+      );
+
+      public.samples (
+        id BIGINT PRIMARY KEY,
+        uri TEXT,
+        "modelId" BIGINT,        -- References models.id
+        created_at TIMESTAMP WITH TIME ZONE
+      );
+
+      Example Queries:
+      1. Find user by email with their models:
+        SELECT 
+          p.email,
+          p.full_name,
+          COUNT(m.id) as total_models,
+          SUM(CASE WHEN m.status = 'finished' THEN 1 ELSE 0 END) as finished_models,
+          COALESCE(SUM(c.credits), 0) as total_credits
+        FROM public.profiles p
+        LEFT JOIN public.models m ON p.id = m.user_id
+        LEFT JOIN public.credits c ON p.id = c.user_id
+        WHERE LOWER(p.email) LIKE LOWER('%search_term%')
+        GROUP BY p.id, p.email, p.full_name
+        LIMIT 100;
+
+      2. Search users by name with their activity:
+        SELECT 
+          p.full_name,
+          p.email,
+          COUNT(DISTINCT m.id) as models_count,
+          COUNT(DISTINCT i.id) as images_count,
+          COALESCE(SUM(c.credits), 0) as total_credits
+        FROM public.profiles p
+        LEFT JOIN public.models m ON p.id = m.user_id
+        LEFT JOIN public.images i ON m.id = i."modelId"
+        LEFT JOIN public.credits c ON p.id = c.user_id
+        WHERE LOWER(p.full_name) LIKE LOWER('%search_term%')
+        GROUP BY p.id, p.full_name, p.email
+        LIMIT 100;
+
+      Note: Always use proper case for column names and double quotes for "modelId"`,
+      prompt: `Write a PostgreSQL query to: ${input}
+
+      Requirements:
+      1. Include profile information when relevant
+      2. Use proper JOIN conditions
+      3. Handle case-insensitive text search
+      4. Include meaningful aggregations
+      5. Limit to 100 results`,
+      schema: z.object({
+        query: z.string(),
+      }),
+    });
+    
+    let query = result.object.query.trim();
+    
+    // Ensure query ends with LIMIT 100
+    if (!query.toLowerCase().includes('limit')) {
+      query = query.replace(/;?\s*$/, ' LIMIT 100;');
+    }
+
+    // Validate and log query
+    if (!query.toLowerCase().startsWith('select')) {  // Fixed: starts with -> startsWith
+      throw new Error('Generated query must start with SELECT');
+    }
+
+    console.log('Generated query:', query);
+    return query;
+  } catch (e) {
+    console.error('Query generation error:', e);
+    throw new Error(`Failed to generate query: ${e.message}`);
+  }
 };
 
 export const explainQuery = async (input: string, sqlQuery: string) => {
@@ -108,69 +254,44 @@ export const explainQuery = async (input: string, sqlQuery: string) => {
       schema: z.object({
         explanations: explanationsSchema,
       }),
-      system: `You are a SQL (postgres) expert. Your job is to explain to the user write a SQL query you wrote to retrieve the data they asked for. The table schema is as follows:
-    unicorns (
-      id SERIAL PRIMARY KEY,
-      company VARCHAR(255) NOT NULL UNIQUE,
-      valuation DECIMAL(10, 2) NOT NULL,
-      date_joined DATE,
-      country VARCHAR(255) NOT NULL,
-      city VARCHAR(255) NOT NULL,
-      industry VARCHAR(255) NOT NULL,
-      select_investors TEXT NOT NULL
-    );
+      system: `You are a SQL (postgres) expert. Explain queries for these tables:
+      
+      - credits: Stores user credit information
+      - models: Stores AI model metadata
+      - images: Stores generated images
+      - samples: Stores training samples
+      
+      Key aspects to explain:
+      1. Table joins and relationships
+      2. Time-based operations
+      3. Aggregations
+      4. Filtering conditions
+      5. Group by / Having clauses`,
+      prompt: `Explain this query in simple terms:
 
-    When you explain you must take a section of the query, and then explain it. Each "section" should be unique. So in a query like: "SELECT * FROM unicorns limit 20", the sections could be "SELECT *", "FROM UNICORNS", "LIMIT 20".
-    If a section doesnt have any explanation, include it, but leave the explanation empty.
-
-    `,
-      prompt: `Explain the SQL query you generated to retrieve the data the user wanted. Assume the user is not an expert in SQL. Break down the query into steps. Be concise.
-
-      User Query:
-      ${input}
-
-      Generated SQL Query:
-      ${sqlQuery}`,
+      User Query: ${input}
+      SQL Query: ${sqlQuery}`,
     });
     return result.object;
   } catch (e) {
     console.error(e);
-    throw new Error("Failed to generate query");
+    throw new Error("Failed to generate explanation");
   }
 };
 
-export const generateChartConfig = async (
-  results: Result[],
-  userQuery: string,
-) => {
+export const generateChartConfig = async (results: Result[], userQuery: string) => {
   "use server";
-  const system = `You are a data visualization expert. `;
-
   try {
     const { object: config } = await generateObject({
-      model: openai("gpt-4o"),
-      system,
-      prompt: `Given the following data from a SQL query result, generate the chart config that best visualises the data and answers the users query.
-      For multiple groups use multi-lines.
-
-      Here is an example complete config:
-      export const chartConfig = {
-        type: "pie",
-        xKey: "month",
-        yKeys: ["sales", "profit", "expenses"],
-        colors: {
-          sales: "#4CAF50",    // Green for sales
-          profit: "#2196F3",   // Blue for profit
-          expenses: "#F44336"  // Red for expenses
-        },
-        legend: true
-      }
-
-      User Query:
-      ${userQuery}
-
-      Data:
-      ${JSON.stringify(results, null, 2)}`,
+      model: openai("gpt-4"), // Fixed model name
+      system: `You are a data visualization expert. Recommend charts based on:
+      - Time series: line charts for credit usage over time
+      - Distributions: histograms or box plots for credit balances
+      - User comparisons: bar charts for credit usage by user
+      - Aggregations: pie charts for credit distribution`,
+      prompt: `Suggest visualization for:
+      Query: ${userQuery}
+      Data: ${JSON.stringify(results, null, 2)}`,
       schema: configSchema,
     });
 
@@ -179,11 +300,32 @@ export const generateChartConfig = async (
       colors[key] = `hsl(var(--chart-${index + 1}))`;
     });
 
-    const updatedConfig: Config = { ...config, colors };
-    return { config: updatedConfig };
+    return { config: { ...config, colors } };
   } catch (e) {
-    // @ts-expect-errore
-    console.error(e.message);
-    throw new Error("Failed to generate chart suggestion");
+    console.error('Chart configuration error:', e);
+    throw new Error(`Failed to generate chart configuration: ${e.message}`);
+  }
+};
+
+export const getDashboardStats = async () => {
+  try {
+    const { data, error } = await supabase.rpc('execute_query', {
+      query_text: `
+        SELECT 
+          (SELECT COUNT(DISTINCT user_id) FROM public.models) as total_users,
+          (SELECT COUNT(*) FROM public.models) as total_models,
+          (SELECT COUNT(*) FROM public.models WHERE status = 'completed') as completed_models,
+          (SELECT COUNT(*) FROM public.models WHERE status = 'processing') as processing_models,
+          (SELECT COUNT(*) FROM public.images) as total_images,
+          (SELECT COUNT(*) FROM public.samples) as total_samples,
+          (SELECT SUM(credits) FROM public.credits) as total_credits
+      `
+    });
+
+    if (error) throw error;
+    return data?.[0] || null;
+  } catch (e: any) {
+    console.error("Failed to fetch dashboard stats:", e);
+    return null;
   }
 };
