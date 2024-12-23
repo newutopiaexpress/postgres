@@ -1,3 +1,8 @@
+'use client';
+
+import React from 'react';
+import Image from 'next/image';
+
 interface LucyConnectionStatusProps {
   status: string;
   loading: boolean;
@@ -21,6 +26,7 @@ export function LucyConnectionStatus({ status, loading, onTest }: LucyConnection
     <button
       onClick={onTest}
       disabled={loading}
+      type="button"
       className={`px-4 py-2 rounded text-white transition-colors ${getStatusColor()} disabled:opacity-50 flex items-center justify-center gap-2`}
     >
       {loading ? (
@@ -30,7 +36,13 @@ export function LucyConnectionStatus({ status, loading, onTest }: LucyConnection
         </>
       ) : (
         <>
-          <span>🤖</span>
+          <Image
+            src="/lucy.png"
+            alt="Lucy"
+            width={24}
+            height={24}
+            className="rounded-full"
+          />
           {status || "Test Database Connection"}
         </>
       )}

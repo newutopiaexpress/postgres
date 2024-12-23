@@ -1,88 +1,73 @@
-import { motion } from "framer-motion";
-import { Button } from "./ui/button";
+'use client';
 
-export const SuggestedQueries = ({
-  handleSuggestionClick,
-}: {
+import React from 'react';
+
+interface SuggestedQueriesProps {
   handleSuggestionClick: (suggestion: string) => void;
-}) => {
-  const suggestionQueries = [
+}
+
+export function SuggestedQueries({ handleSuggestionClick }: SuggestedQueriesProps) {
+  const queryGroups = [
     {
-      desktop: "Compare count of unicorns in SF and NY over time",
-      mobile: "SF vs NY",
+      title: "User Analysis",
+      queries: [
+        "Show me users with the most finished models",
+        "Find users who have used more than 1000 credits",
+        "List users who created models in the last 24 hours",
+        "Show me users with failed or stuck models",
+      ]
     },
     {
-      desktop: "Compare unicorn valuations in the US vs China over time",
-      mobile: "US vs China",
+      title: "Model Performance",
+      queries: [
+        "What's the average time to complete a model?",
+        "Show me models that took longest to finish",
+        "List models with the most generated images",
+        "Compare success rates between model types",
+      ]
     },
     {
-      desktop: "Countries with highest unicorn density",
-      mobile: "Top countries",
+      title: "Credit Usage",
+      queries: [
+        "Show daily credit consumption trend",
+        "Which model types use most credits?",
+        "List users with highest credit usage per model",
+        "Compare credit efficiency between model types",
+      ]
     },
     {
-      desktop:
-        "Show the number of unicorns founded each year over the past two decades",
-      mobile: "Yearly count",
-    },
-    {
-      desktop: "Display the cumulative total valuation of unicorns over time",
-      mobile: "Total value",
-    },
-    {
-      desktop:
-        "Compare the yearly funding amounts for fintech vs healthtech unicorns",
-      mobile: "Fintech vs health",
-    },
-    {
-      desktop: "Which cities have with most SaaS unicorns",
-      mobile: "SaaS cities",
-    },
-    {
-      desktop: "Show the countries with highest unicorn density",
-      mobile: "Dense nations",
-    },
-    {
-      desktop:
-        "Show the number of unicorns (grouped by year) over the past decade",
-      mobile: "Decade trend",
-    },
-    {
-      desktop:
-        "Compare the average valuation of AI companies vs. biotech companies",
-      mobile: "AI vs biotech",
-    },
-    {
-      desktop: "Investors with the most unicorns",
-      mobile: "Top investors",
-    },
+      title: "Search by Email",
+      queries: [
+        "Find all data for user@example.com",
+        "Show credit history for specific email",
+        "List all models by email address",
+        "Get stats for gmail users",
+      ]
+    }
   ];
 
   return (
-    <motion.div
-      key="suggestions"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      layout
-      exit={{ opacity: 0 }}
-      className="h-full overflow-y-auto"
-    >
-      <h2 className="text-lg sm:text-xl font-semibold text-foreground mb-4">
-        Try these queries:
-      </h2>
-      <div className="flex flex-wrap gap-2">
-        {suggestionQueries.map((suggestion, index) => (
-          <Button
-            key={index}
-            className={index > 5 ? "hidden sm:inline-block" : ""}
-            type="button"
-            variant="outline"
-            onClick={() => handleSuggestionClick(suggestion.desktop)}
-          >
-            <span className="sm:hidden">{suggestion.mobile}</span>
-            <span className="hidden sm:inline">{suggestion.desktop}</span>
-          </Button>
-        ))}
-      </div>
-    </motion.div>
+    <div className="space-y-6">
+      {queryGroups.map((group) => (
+        <div key={group.title} className="space-y-2">
+          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+            {group.title}
+          </h3>
+          <div className="space-y-2">
+            {group.queries.map((query) => (
+              <button
+                key={query}
+                onClick={() => handleSuggestionClick(query)}
+                className="w-full text-left px-3 py-2 text-sm rounded-lg 
+                  bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 
+                  dark:hover:bg-gray-600 transition-colors"
+              >
+                {query}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
-};
+}

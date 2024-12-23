@@ -136,95 +136,70 @@ export const runGenerateSQLQuery = async (query: string) => {
   }
 };
 
-export const generateQuery = async (input: string) => {
+interface OpenAIResponse {
+  object: {
+    query: string;
+  };
+}
+
+export const generateQuery = async (input: string): Promise<string> => {
   "use server";
   try {
     const result = await generateObject({
       model: openai("gpt-4"),
-      system: `You are a SQL analyst helping website administrators analyze user data and activity.
+      system: `You are a SQL analyst for an AI model training platform. Common analysis patterns:
 
-      Database Schema:
-      public.profiles (
-        id UUID PRIMARY KEY,       -- References auth.users(id)
-        full_name TEXT,           -- User's full name
-        email TEXT,               -- User's email address
-        -- other columns not needed for analysis
-      );
-
-      public.models (
-        id BIGINT PRIMARY KEY,
-        name TEXT,               -- Model name given by user
-        type TEXT,               -- Model type
-        created_at TIMESTAMP WITH TIME ZONE,
-        user_id UUID,            -- References auth.users(id)
-        status TEXT,             -- Model status
-        "modelId" TEXT           -- External reference
-      );
-
-      public.credits (
-        id BIGINT PRIMARY KEY,
-        created_at TIMESTAMP WITH TIME ZONE,
-        credits INTEGER,         -- Credit amount
-        user_id UUID            -- References auth.users(id)
-      );
-
-      public.images (
-        id BIGINT PRIMARY KEY,
-        "modelId" BIGINT,        -- References models.id
-        uri TEXT,
-        created_at TIMESTAMP WITH TIME ZONE
-      );
-
-      public.samples (
-        id BIGINT PRIMARY KEY,
-        uri TEXT,
-        "modelId" BIGINT,        -- References models.id
-        created_at TIMESTAMP WITH TIME ZONE
-      );
-
-      Example Queries:
-      1. Find user by email with their models:
-        SELECT 
-          p.email,
-          p.full_name,
-          COUNT(m.id) as total_models,
-          SUM(CASE WHEN m.status = 'finished' THEN 1 ELSE 0 END) as finished_models,
+      1. User Activity Analysis:
+        SELECT p.email, COUNT(m.id) as total_models,
+          COUNT(CASE WHEN m.status = 'finished' THEN 1 END) as completed_models,
           COALESCE(SUM(c.credits), 0) as total_credits
+        FROM public.profiles p
+        LEFT JOIN public.models m ON p.id = m.user_id
+        LEFT JOIN public.credits c ON p.id = c.user_id
+        GROUP BY p.id, p.email
+        ORDER BY total_models DESC LIMIT 10;
+
+      2. Model Performance:
+        SELECT m.type, 
+          AVG(EXTRACT(EPOCH FROM (
+            CASE WHEN m.status = 'finished' 
+            THEN m.created_at - m.created_at END
+          ))/3600)::numeric(10,2) as avg_hours_to_complete,
+          COUNT(*) as total_models,
+          COUNT(CASE WHEN m.status = 'finished' THEN 1 END) as successful_models
+        FROM public.models m
+        GROUP BY m.type;
+
+      3. Credit Analysis:
+        SELECT DATE_TRUNC('day', c.created_at) as date,
+          COUNT(DISTINCT c.user_id) as unique_users,
+          SUM(c.credits) as daily_credits
+        FROM public.credits c
+        GROUP BY DATE_TRUNC('day', c.created_at)
+        ORDER BY date DESC;
+
+      4. Email Search:
+        SELECT p.email, STRING_AGG(m."modelId"::text, ', ') as model_ids,
+          COALESCE(SUM(c.credits), 0) as total_credits,
+          COUNT(CASE WHEN m.status = 'finished' THEN 1 END) as finished_models
         FROM public.profiles p
         LEFT JOIN public.models m ON p.id = m.user_id
         LEFT JOIN public.credits c ON p.id = c.user_id
         WHERE LOWER(p.email) LIKE LOWER('%search_term%')
-        GROUP BY p.id, p.email, p.full_name
-        LIMIT 100;
+        GROUP BY p.id, p.email;
 
-      2. Search users by name with their activity:
-        SELECT 
-          p.full_name,
-          p.email,
-          COUNT(DISTINCT m.id) as models_count,
-          COUNT(DISTINCT i.id) as images_count,
-          COALESCE(SUM(c.credits), 0) as total_credits
-        FROM public.profiles p
-        LEFT JOIN public.models m ON p.id = m.user_id
-        LEFT JOIN public.images i ON m.id = i."modelId"
-        LEFT JOIN public.credits c ON p.id = c.user_id
-        WHERE LOWER(p.full_name) LIKE LOWER('%search_term%')
-        GROUP BY p.id, p.full_name, p.email
-        LIMIT 100;
-
-      Note: Always use proper case for column names and double quotes for "modelId"`,
+      Always include proper JOINs, handle NULLs with COALESCE, and use meaningful column aliases.`,
       prompt: `Write a PostgreSQL query to: ${input}
 
       Requirements:
-      1. Include profile information when relevant
-      2. Use proper JOIN conditions
-      3. Handle case-insensitive text search
-      4. Include meaningful aggregations
-      5. Limit to 100 results`,
+      1. Join profiles with models and credits
+      2. Handle case-insensitive email search
+      3. Group results by user
+      4. Show all model IDs as comma-separated list`,
       schema: z.object({
         query: z.string(),
       }),
-    });
+    }) as OpenAIResponse;
     
     let query = result.object.query.trim();
     

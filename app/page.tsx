@@ -2,24 +2,45 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { Bar } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
 import {
   generateChartConfig,
   generateQuery,
   runGenerateSQLQuery,
   testDatabaseConnection,
 } from "./actions";
-import { Config, Result } from "@/lib/types";
+import { Config, Result, DashboardStats, TopUser, ChartData, ChartOptions } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+// Update imports to use components from the components folder
 import { ProjectInfo } from "@/components/project-info";
 import { Results } from "@/components/results";
-import { SuggestedQueries } from "@/components/suggested-queries";
+import { SuggestedQueries } from "@/components/suggested-queries"; // Updated path
 import { QueryViewer } from "@/components/query-viewer";
 import { Search } from "@/components/search";
 import { Header } from "@/components/header";
 import { LucyConnectionStatus } from "@/components/LucyConnectionStatus";
 import { LatestImage } from "@/components/LatestImage";
 import { LatestModels } from '@/components/LatestModels';
+
+// Register ChartJS components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 export default function Page() {
   const [inputValue, setInputValue] = useState("");
@@ -31,23 +52,20 @@ export default function Page() {
   const [loadingStep, setLoadingStep] = useState(1);
   const [chartConfig, setChartConfig] = useState<Config | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<string>("");
-  const [dashboardStats, setDashboardStats] = useState<any>(null);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [latestImage, setLatestImage] = useState<string | undefined>();
   const [latestModels, setLatestModels] = useState<any[]>([]);
+  const [topUsers, setTopUsers] = useState<TopUser[]>([]);
 
-  // Fetch initial dashboard stats
   useEffect(() => {
     const fetchDashboardStats = async () => {
       try {
         const stats = await runGenerateSQLQuery(`
           SELECT 
-            (SELECT COUNT(DISTINCT user_id) FROM public.models) as total_users,
-            (SELECT COUNT(*) FROM public.models) as total_models,
-            (SELECT COUNT(*) FROM public.models WHERE status = 'finished') as completed_models,
-            (SELECT COUNT(*) FROM public.models WHERE status = 'processing') as processing_models,
             (SELECT COUNT(*) FROM public.images) as total_images,
-            (SELECT COUNT(*) FROM public.samples) as total_samples,
-            (SELECT SUM(credits) FROM public.credits) as total_credits
+            (SELECT COUNT(*) FROM public.models) as total_models,
+            (SELECT COUNT(*) FROM public.models WHERE status = 'finished') as finished_models,
+            (SELECT COUNT(*) FROM public.models WHERE status = 'processing') as processing_models
         `);
         setDashboardStats(stats[0]);
       } catch (error) {
@@ -58,7 +76,6 @@ export default function Page() {
     fetchDashboardStats();
   }, []);
 
-  // Add this useEffect to fetch the latest image
   useEffect(() => {
     const fetchLatestImage = async () => {
       try {
@@ -79,7 +96,6 @@ export default function Page() {
     fetchLatestImage();
   }, []);
 
-  // Add this useEffect
   useEffect(() => {
     const fetchLatestModels = async () => {
       try {
@@ -111,6 +127,61 @@ export default function Page() {
     fetchLatestModels();
   }, []);
 
+  useEffect(() => {
+    const fetchTopUsers = async () => {
+      try {
+        const result = await runGenerateSQLQuery(`
+          SELECT 
+            p.email,
+            COUNT(m.id) as model_count
+          FROM public.profiles p 
+          JOIN public.models m ON p.id = m.user_id 
+          WHERE m.status = 'finished'
+          GROUP BY p.id, p.email
+          ORDER BY model_count DESC
+          LIMIT 10
+        `);
+        setTopUsers(result);
+      } catch (error) {
+        console.error('Failed to fetch top users:', error);
+      }
+    };
+
+    fetchTopUsers();
+  }, []);
+
+  const chartData: ChartData = {
+    labels: topUsers.map(user => user.email.split('@')[0]), // Show only username part
+    datasets: [
+      {
+        label: 'Finished Models',
+        data: topUsers.map(user => user.model_count),
+        backgroundColor: 'rgba(53, 162, 235, 0.5)',
+        borderColor: 'rgb(53, 162, 235)',
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  const chartOptions: ChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+      title: {
+        display: true,
+        text: 'Top 10 Users by Finished Models',
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+      },
+    },
+  };
+
   const handleSubmit = async (suggestion?: string) => {
     const question = suggestion ?? inputValue;
     if (inputValue.length === 0 && !suggestion) return;
@@ -121,8 +192,6 @@ export default function Page() {
     setLoadingStep(1);
     
     try {
-      // Generate SQL query
-      console.log('Generating query for:', question);
       const query = await generateQuery(question);
       if (!query) {
         throw new Error("Failed to generate SQL query");
@@ -130,12 +199,8 @@ export default function Page() {
       
       setActiveQuery(query);
       setLoadingStep(2);
-      console.log('Generated query:', query);
       
-      // Execute SQL query
-      console.log('Executing query...');
       const queryResults = await runGenerateSQLQuery(query);
-      console.log('Query results:', queryResults);
       
       if (!queryResults || queryResults.length === 0) {
         toast.warning("No results found");
@@ -143,13 +208,11 @@ export default function Page() {
       }
       
       const cols = Object.keys(queryResults[0]);
-      console.log('Columns:', cols);
       
       setResults(queryResults);
       setColumns(cols);
       
     } catch (e: any) {
-      console.error("Error in handleSubmit:", e);
       toast.error(e.message || "An error occurred. Please try again.");
     } finally {
       setLoading(false);
@@ -184,17 +247,14 @@ export default function Page() {
       const result = await testDatabaseConnection();
       if (result.success) {
         toast.success(result.message);
-        console.log('Connection details:', result.details);
         setConnectionStatus('Connected');
       } else {
         toast.error(result.message);
-        console.error('Connection failed:', result.details);
         setConnectionStatus('Connection failed');
       }
     } catch (e: any) {
       const errorMessage = e.message || 'Failed to test connection';
       toast.error(errorMessage);
-      console.error('Connection error:', e);
       setConnectionStatus('Error');
     } finally {
       setLoading(false);
@@ -204,9 +264,7 @@ export default function Page() {
   return (
     <div className="bg-neutral-50 dark:bg-neutral-900 min-h-screen">
       <div className="container mx-auto px-4 py-8">
-        {/* Header with Stats and Lucy Button */}
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Analytics Dashboard</h1>
+        <div className="mb-6">
           <LucyConnectionStatus
             status={connectionStatus}
             loading={loading}
@@ -214,71 +272,74 @@ export default function Page() {
           />
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
-          <StatCard title="Total Users" value={dashboardStats?.total_users || 0} />
-          <StatCard title="Active Models" value={dashboardStats?.processing_models || 0} />
-          <StatCard title="Completed Models" value={dashboardStats?.completed_models || 0} />
-          <StatCard title="Total Credits Used" value={dashboardStats?.total_credits || 0} />
+        <div className="grid grid-cols-6 gap-4 mb-8">
+          <StatCard title="Total Images" value={dashboardStats?.total_images || 0} />
+          <StatCard title="Total Models" value={dashboardStats?.total_models || 0} />
+          <StatCard title="Finished Models" value={dashboardStats?.finished_models || 0} />
+          <StatCard title="Running Models" value={dashboardStats?.processing_models || 0} />
+          <div className="col-span-2 bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
+            <div className="h-[200px]">
+              <Bar options={chartOptions} data={chartData} />
+            </div>
+          </div>
         </div>
 
-        {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Search Panel - Now wider */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-3 bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
+            <h2 className="text-lg font-semibold mb-4">Latest Completed Models</h2>
+            <LatestModels models={latestModels} />
+          </div>
+        
+          <div className="lg:col-span-6 bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
             <h2 className="text-xl font-semibold mb-4">Analytics Query</h2>
-            <Search
-              handleClear={handleClear}
-              handleSubmit={handleSubmit}
-              inputValue={inputValue}
-              setInputValue={setInputValue}
-              submitted={submitted}
-            />
-            
-            {loading && (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
-                <span className="ml-3 text-gray-500">
-                  {loadingStep === 1 ? "Generating query..." : "Executing query..."}
-                </span>
-              </div>
-            )}
-
-            {activeQuery && !loading && (
-              <QueryViewer
-                activeQuery={activeQuery}
+            <div className="space-y-6">
+              <Search
+                handleClear={handleClear}
+                handleSubmit={handleSubmit}
                 inputValue={inputValue}
+                setInputValue={setInputValue}
+                submitted={submitted}
               />
-            )}
 
-            {results && results.length > 0 && !loading && (
-              <Results
-                results={results}
-                chartConfig={chartConfig}
-                columns={columns}
-              />
-            )}
-
-            {submitted && !loading && results.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                No results found
+              <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                <SuggestedQueries handleSuggestionClick={handleSuggestionClick} />
               </div>
-            )}
+
+              {loading && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+                  <span className="ml-3 text-gray-500">
+                    {loadingStep === 1 ? "Generating query..." : "Executing query..."}
+                  </span>
+                </div>
+              )}
+
+              {activeQuery && !loading && (
+                <QueryViewer
+                  activeQuery={activeQuery}
+                  inputValue={inputValue}
+                />
+              )}
+
+              {results && results.length > 0 && !loading && (
+                <Results
+                  results={results}
+                  chartConfig={chartConfig}
+                  columns={columns}
+                />
+              )}
+
+              {submitted && !loading && results.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  No results found
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Right Panel */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Latest Image Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-              <h2 className="text-lg font-semibold mb-4">Latest Image</h2>
-              <LatestImage imageUri={latestImage} />
-            </div>
-
-            {/* Latest Models Section - Replacing Quick Insights */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-              <h2 className="text-lg font-semibold mb-4">Latest Completed Models</h2>
-              <LatestModels models={latestModels} />
-            </div>
+          <div className="lg:col-span-3 bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
+            <h2 className="text-lg font-semibold mb-4">Latest Image</h2>
+            <LatestImage imageUri={latestImage} />
           </div>
         </div>
       </div>
@@ -286,7 +347,6 @@ export default function Page() {
   );
 }
 
-// Keep StatCard component
 const StatCard = ({ title, value }: { title: string, value: number }) => (
   <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
     <h3 className="text-sm text-gray-500 dark:text-gray-400">{title}</h3>
