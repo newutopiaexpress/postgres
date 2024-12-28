@@ -64,3 +64,15 @@ export type ChatSession = {
   title: string;
   user_id?: string;
 };
+
+export interface TopUser {
+  email: string;
+  model_count: number;
+}
+
+export interface DashboardStats {
+  total_images: number;
+  total_models: number;
+  finished_models: number;
+  processing_models: number;
+}

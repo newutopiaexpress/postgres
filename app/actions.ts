@@ -217,7 +217,11 @@ export const generateQuery = async (input: string): Promise<string> => {
     return query;
   } catch (e) {
     console.error('Query generation error:', e);
-    throw new Error(`Failed to generate query: ${e.message}`);
+    if (e instanceof Error) {
+      throw new Error(`Failed to generate query: ${e.message}`);
+    } else {
+      throw new Error('Failed to generate query: Unknown error occurred');
+    }
   }
 };
 
@@ -250,7 +254,11 @@ export const explainQuery = async (input: string, sqlQuery: string) => {
     return result.object;
   } catch (e) {
     console.error(e);
-    throw new Error("Failed to generate explanation");
+    if (e instanceof Error) {
+      throw new Error(`Failed to generate explanation: ${e.message}`);
+    } else {
+      throw new Error("Failed to generate explanation: Unknown error occurred");
+    }
   }
 };
 
@@ -278,7 +286,11 @@ export const generateChartConfig = async (results: Result[], userQuery: string) 
     return { config: { ...config, colors } };
   } catch (e) {
     console.error('Chart configuration error:', e);
-    throw new Error(`Failed to generate chart configuration: ${e.message}`);
+    if (e instanceof Error) {
+      throw new Error(`Failed to generate chart configuration: ${e.message}`);
+    } else {
+      throw new Error('Failed to generate chart configuration: Unknown error occurred');
+    }
   }
 };
 

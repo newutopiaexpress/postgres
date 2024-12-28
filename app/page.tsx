@@ -18,7 +18,7 @@ import {
   runGenerateSQLQuery,
   testDatabaseConnection,
 } from "./actions";
-import { Config, Result } from "@/lib/types";
+import { Config, Result, DashboardStats, TopUser } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ProjectInfo } from "@/components/project-info";
@@ -52,10 +52,10 @@ export default function Page() {
   const [loadingStep, setLoadingStep] = useState(1);
   const [chartConfig, setChartConfig] = useState<Config | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<string>("");
-  const [dashboardStats, setDashboardStats] = useState<any>(null);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [latestImage, setLatestImage] = useState<string | undefined>();
   const [latestModels, setLatestModels] = useState<any[]>([]);
-  const [topUsers, setTopUsers] = useState<any[]>([]);
+  const [topUsers, setTopUsers] = useState<TopUser[]>([]);
   const [activeTab, setActiveTab] = useState<'analytics' | 'chat'>('analytics');
 
   useEffect(() => {
