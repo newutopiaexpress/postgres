@@ -68,7 +68,16 @@ export default function Page() {
             (SELECT COUNT(*) FROM public.models WHERE status = 'finished') as finished_models,
             (SELECT COUNT(*) FROM public.models WHERE status = 'processing') as processing_models
         `);
-        setDashboardStats(stats[0]);
+        
+        // Add type assertion to ensure the result matches DashboardStats interface
+        const dashboardData: DashboardStats = {
+          total_images: Number(stats[0].total_images),
+          total_models: Number(stats[0].total_models),
+          finished_models: Number(stats[0].finished_models),
+          processing_models: Number(stats[0].processing_models)
+        };
+        
+        setDashboardStats(dashboardData);
       } catch (error) {
         console.error('Failed to fetch dashboard stats:', error);
       }
