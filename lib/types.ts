@@ -80,3 +80,9 @@ export interface DashboardStats {
 export interface ImageResult {
   uri: string;
 }
+
+export interface ModelImage {
+  uri: string;
+  model_name: string;
+  created_at: string;
+}

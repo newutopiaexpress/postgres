@@ -18,7 +18,7 @@ import {
   runGenerateSQLQuery,
   testDatabaseConnection,
 } from "./actions";
-import { Config, Result, DashboardStats, TopUser, ImageResult } from "@/lib/types";
+import { Config, Result, DashboardStats, TopUser, ModelImage } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ProjectInfo } from "@/components/project-info";
@@ -53,7 +53,7 @@ export default function Page() {
   const [chartConfig, setChartConfig] = useState<Config | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<string>("");
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
-  const [latestImage, setLatestImage] = useState<string | undefined>();
+  const [latestImages, setLatestImages] = useState<ModelImage[]>([]);
   const [latestModels, setLatestModels] = useState<any[]>([]);
   const [topUsers, setTopUsers] = useState<TopUser[]>([]);
   const [activeTab, setActiveTab] = useState<'analytics' | 'chat'>('analytics');
@@ -87,26 +87,34 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    const fetchLatestImage = async () => {
+    const fetchLatestImages = async () => {
       try {
         const result = await runGenerateSQLQuery(`
-          SELECT uri 
-          FROM public.images 
-          ORDER BY created_at DESC 
-          LIMIT 1
-        `);
+          SELECT 
+            i.uri,
+            m.name as model_name,
+            i.created_at
+          FROM public.images i
+          JOIN public.models m ON i."modelId" = m.id
+          WHERE m.status = 'finished'
+          ORDER BY i.created_at DESC
+          LIMIT 24
+        `); // Changed from LIMIT 4 to LIMIT 6 - adjust this number as needed
         
-        // Type guard to ensure the result has the uri property
-        if (result && result[0] && typeof result[0].uri === 'string') {
-          const imageResult: ImageResult = { uri: result[0].uri };
-          setLatestImage(imageResult.uri);
+        if (result && result.length > 0) {
+          const modelImages: ModelImage[] = result.map(item => ({
+            uri: String(item.uri),
+            model_name: String(item.model_name),
+            created_at: String(item.created_at)
+          }));
+          setLatestImages(modelImages);
         }
       } catch (error) {
-        console.error('Failed to fetch latest image:', error);
+        console.error('Failed to fetch latest images:', error);
       }
     };
 
-    fetchLatestImage();
+    fetchLatestImages();
   }, []);
 
   useEffect(() => {
@@ -393,8 +401,8 @@ export default function Page() {
           </div>
 
           <div className="lg:col-span-3 bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-            <h2 className="text-lg font-semibold mb-4">Latest Image</h2>
-            <LatestImage imageUri={latestImage} />
+            <h2 className="text-lg font-semibold mb-4">Latest Model Images</h2>
+            <LatestImage images={latestImages} />
           </div>
         </div>
       </div>
