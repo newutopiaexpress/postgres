@@ -76,3 +76,7 @@ export interface DashboardStats {
   finished_models: number;
   processing_models: number;
 }
+
+export interface ImageResult {
+  uri: string;
+}

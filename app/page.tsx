@@ -18,7 +18,7 @@ import {
   runGenerateSQLQuery,
   testDatabaseConnection,
 } from "./actions";
-import { Config, Result, DashboardStats, TopUser } from "@/lib/types";
+import { Config, Result, DashboardStats, TopUser, ImageResult } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ProjectInfo } from "@/components/project-info";
@@ -95,8 +95,11 @@ export default function Page() {
           ORDER BY created_at DESC 
           LIMIT 1
         `);
-        if (result && result[0]) {
-          setLatestImage(result[0].uri);
+        
+        // Type guard to ensure the result has the uri property
+        if (result && result[0] && typeof result[0].uri === 'string') {
+          const imageResult: ImageResult = { uri: result[0].uri };
+          setLatestImage(imageResult.uri);
         }
       } catch (error) {
         console.error('Failed to fetch latest image:', error);
@@ -151,7 +154,14 @@ export default function Page() {
           ORDER BY model_count DESC
           LIMIT 10
         `);
-        setTopUsers(result);
+        
+        // Add type casting to ensure the result matches TopUser interface
+        const typedResult: TopUser[] = result.map(item => ({
+          email: String(item.email),
+          model_count: Number(item.model_count)
+        }));
+        
+        setTopUsers(typedResult);
       } catch (error) {
         console.error('Failed to fetch top users:', error);
       }
