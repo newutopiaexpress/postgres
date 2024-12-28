@@ -18,19 +18,19 @@ import {
   runGenerateSQLQuery,
   testDatabaseConnection,
 } from "./actions";
-import { Config, Result, DashboardStats, TopUser, ChartData, ChartOptions } from "@/lib/types";
+import { Config, Result } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-// Update imports to use components from the components folder
 import { ProjectInfo } from "@/components/project-info";
 import { Results } from "@/components/results";
-import { SuggestedQueries } from "@/components/suggested-queries"; // Updated path
+import { SuggestedQueries } from "@/components/suggested-queries";
 import { QueryViewer } from "@/components/query-viewer";
 import { Search } from "@/components/search";
 import { Header } from "@/components/header";
 import { LucyConnectionStatus } from "@/components/LucyConnectionStatus";
 import { LatestImage } from "@/components/LatestImage";
 import { LatestModels } from '@/components/LatestModels';
+import { cn } from "@/lib/utils";  // Add this import if not already present
 
 // Register ChartJS components
 ChartJS.register(
@@ -52,10 +52,11 @@ export default function Page() {
   const [loadingStep, setLoadingStep] = useState(1);
   const [chartConfig, setChartConfig] = useState<Config | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<string>("");
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
   const [latestImage, setLatestImage] = useState<string | undefined>();
   const [latestModels, setLatestModels] = useState<any[]>([]);
-  const [topUsers, setTopUsers] = useState<TopUser[]>([]);
+  const [topUsers, setTopUsers] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'analytics' | 'chat'>('analytics');
 
   useEffect(() => {
     const fetchDashboardStats = async () => {
@@ -150,7 +151,7 @@ export default function Page() {
     fetchTopUsers();
   }, []);
 
-  const chartData: ChartData = {
+  const chartData = {
     labels: topUsers.map(user => user.email.split('@')[0]), // Show only username part
     datasets: [
       {
@@ -163,7 +164,7 @@ export default function Page() {
     ],
   };
 
-  const chartOptions: ChartOptions = {
+  const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -291,50 +292,85 @@ export default function Page() {
           </div>
         
           <div className="lg:col-span-6 bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-            <h2 className="text-xl font-semibold mb-4">Analytics Query</h2>
-            <div className="space-y-6">
-              <Search
-                handleClear={handleClear}
-                handleSubmit={handleSubmit}
-                inputValue={inputValue}
-                setInputValue={setInputValue}
-                submitted={submitted}
-              />
-
-              <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                <SuggestedQueries handleSuggestionClick={handleSuggestionClick} />
+            <div className="border-b border-gray-200 dark:border-gray-700">
+              <div className="flex space-x-4">
+                <button
+                  onClick={() => setActiveTab('analytics')}
+                  className={cn(
+                    "py-2 px-4 -mb-px",
+                    activeTab === 'analytics'
+                      ? "border-b-2 border-blue-500 text-blue-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  Analytics Query
+                </button>
+                <button
+                  onClick={() => setActiveTab('chat')}
+                  className={cn(
+                    "py-2 px-4 -mb-px",
+                    activeTab === 'chat'
+                      ? "border-b-2 border-blue-500 text-blue-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  Chat with Lucy
+                </button>
               </div>
-
-              {loading && (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
-                  <span className="ml-3 text-gray-500">
-                    {loadingStep === 1 ? "Generating query..." : "Executing query..."}
-                  </span>
-                </div>
-              )}
-
-              {activeQuery && !loading && (
-                <QueryViewer
-                  activeQuery={activeQuery}
-                  inputValue={inputValue}
-                />
-              )}
-
-              {results && results.length > 0 && !loading && (
-                <Results
-                  results={results}
-                  chartConfig={chartConfig}
-                  columns={columns}
-                />
-              )}
-
-              {submitted && !loading && results.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  No results found
-                </div>
-              )}
             </div>
+
+            {activeTab === 'analytics' && (
+              <div className="mt-4">
+                <Search
+                  handleClear={handleClear}
+                  handleSubmit={handleSubmit}
+                  inputValue={inputValue}
+                  setInputValue={setInputValue}
+                  submitted={submitted}
+                />
+                
+                {loading && (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+                    <span className="ml-3 text-gray-500">
+                      {loadingStep === 1 ? "Generating query..." : "Executing query..."}
+                    </span>
+                  </div>
+                )}
+
+                {activeQuery && !loading && (
+                  <QueryViewer
+                    activeQuery={activeQuery}
+                    inputValue={inputValue}
+                  />
+                )}
+
+                {results && results.length > 0 && !loading && (
+                  <Results
+                    results={results}
+                    chartConfig={chartConfig}
+                    columns={columns}
+                  />
+                )}
+
+                {submitted && !loading && results.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    No results found
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'chat' && (
+              <div className="mt-4">
+                <div className="text-center py-8">
+                  <h3 className="text-lg font-semibold mb-2">Chat with Lucy</h3>
+                  <p className="text-gray-500">
+                    Coming soon! Chat directly with Lucy AI for natural language interactions.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="lg:col-span-3 bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">

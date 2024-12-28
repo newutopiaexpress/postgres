@@ -48,5 +48,19 @@ export const configSchema = z
   })
   .describe("Chart configuration object");
 
-
 export type Config = z.infer<typeof configSchema>;
+
+export type Message = {
+  id?: string;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at?: string;
+  session_id?: string;
+};
+
+export type ChatSession = {
+  id: string;
+  created_at: string;
+  title: string;
+  user_id?: string;
+};
